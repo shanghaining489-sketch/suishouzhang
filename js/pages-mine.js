@@ -12,6 +12,7 @@ SSZ.renderers.mine = function (page) {
 
   html +=
     '<div class="block"><div class="list-group">' +
+    SSZ.mineRow('🤖', 'AI 智能记账', '语音 + 截图自动识别', 'ai') +
     SSZ.mineRow('🏷️', '分类管理', '自定义收支分类', 'categories') +
     SSZ.mineRow('🎯', '月度预算', '控制每月花销', 'budget') +
     SSZ.mineRow('🐷', '存钱目标', '攒钱进度追踪', 'goals') +
