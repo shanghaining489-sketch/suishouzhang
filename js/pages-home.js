@@ -25,12 +25,12 @@ SSZ.renderers.home = function (page) {
     '<span class="item"><span class="dot" style="background:#BFF0D6"></span>结余 <b>' + SSZ.fmt(st.balance) + '</b></span>' +
     '</div></div></div>';
 
-  /* 语音记账入口（v1.1） */
+  /* AI 智能记账入口（v1.2：语音 + 截图识别） */
   html +=
     '<div class="block">' +
-    '<button class="voice-cta" id="home-voice" type="button">' +
-    '<span class="vc-ic">🎤</span>' +
-    '<span class="vc-text"><b>语音记账</b><small>说一句就记好，如「午饭12块」</small></span>' +
+    '<button class="voice-cta" id="home-ai" type="button">' +
+    '<span class="vc-ic">🤖</span>' +
+    '<span class="vc-text"><b>AI 智能记账</b><small>说一句，或传截图，自动识别多笔</small></span>' +
     '<span class="vc-go">›</span>' +
     '</button></div>';
 
@@ -113,8 +113,8 @@ SSZ.renderers.home = function (page) {
   const cta = page.querySelector('#home-budget-cta');
   if (cta) cta.onclick = function () { SSZ.openBudgetSheet(ym); };
 
-  const voice = page.querySelector('#home-voice');
-  if (voice) voice.onclick = function () { SSZ.openVoiceSheet(); };
+  const voice = page.querySelector('#home-ai');
+  if (voice) voice.onclick = function () { SSZ.navigate('ai'); };
 
   const gen = page.querySelector('#due-gen');
   if (gen) {
