@@ -17,7 +17,7 @@ SSZ.KEYS = {
   recents: 'ssz.recents'
 };
 
-SSZ.VERSION = '1.0.0';
+SSZ.VERSION = '1.1.0';
 
 /* ---------------- 基础工具 ---------------- */
 
