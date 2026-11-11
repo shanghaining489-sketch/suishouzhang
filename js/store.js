@@ -20,7 +20,7 @@ SSZ.KEYS = {
   settings: 'ssz.settings'      // v1.3 外观设置（主题）
 };
 
-SSZ.VERSION = '1.3.1';
+SSZ.VERSION = '1.3.2';
 
 /* ---------------- 基础工具 ---------------- */
 
@@ -520,6 +520,11 @@ SSZ.storageInfo = function () {
   Object.keys(SSZ.KEYS).forEach(function (k) {
     const raw = localStorage.getItem(SSZ.KEYS[k]);
     if (raw) bytes += raw.length * 2; // UTF-16 近似
+  });
+  // 快照与回滚点也是本机占用，一并计入，否则用量会低估
+  ['ssz.snapshots', 'ssz.rollback'].forEach(function (k) {
+    const raw = localStorage.getItem(k);
+    if (raw) bytes += raw.length * 2;
   });
   const kb = bytes / 1024;
   return { kb: kb, pct: Math.min(100, Math.round(kb / 5120 * 100)) }; // 按 5MB 估
