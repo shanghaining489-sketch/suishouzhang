@@ -108,7 +108,11 @@ SSZ._mapAiRecord = function (r) {
   var amountYuan = Number(r.amount);
   if (!isFinite(amountYuan) || amountYuan <= 0) return null;
   var amount = Math.round(amountYuan * 100);
-  var categoryId = SSZ._catIdByName((r.category || '') || (type === 'income' ? '其他' : '其他'), type);
+  // v1.3：AI 给的分类落到「其他」时，用用户自定义规则 + 商户/备注再猜一次
+  var text = [r.merchant, r.note, r.category].filter(Boolean).join(' ');
+  var categoryId = SSZ.autoCategory
+    ? SSZ.autoCategory(text, type, r.category || '')
+    : SSZ._catIdByName(r.category || '', type);
   var accountId = SSZ._accIdByName(r.account);
   var date = /^(\d{4})-(\d{2})-(\d{2})$/.test(r.date || '') ? r.date : SSZ.todayStr();
   return {
