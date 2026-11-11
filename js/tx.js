@@ -13,19 +13,19 @@ SSZ._prefs = function () {
 
 /* ---------------- 打开记账/编辑弹层 ---------------- */
 
-SSZ.openTxSheet = function (tx) {
+SSZ.openTxSheet = function (tx, preset) {
   const isEdit = !!tx;
   const prefs = SSZ._prefs();
   const st = {
     isEdit: isEdit,
     id: tx ? tx.id : null,
-    type: tx ? tx.type : (prefs.type === 'income' ? 'income' : 'expense'),
-    categoryId: tx ? tx.categoryId : null,
-    amountStr: tx ? SSZ.fmtPlain(tx.amount) : '',
+    type: tx ? tx.type : (preset ? preset.type : (prefs.type === 'income' ? 'income' : 'expense')),
+    categoryId: tx ? tx.categoryId : (preset ? preset.categoryId : null),
+    amountStr: tx ? SSZ.fmtPlain(tx.amount) : (preset ? SSZ.fmtPlain(preset.amount) : ''),
     date: tx ? tx.date : SSZ.todayStr(),
-    accountId: tx ? tx.accountId : null,
-    note: tx ? (tx.note || '') : '',
-    tags: tx ? (tx.tags || []).join(', ') : ''
+    accountId: tx ? tx.accountId : (preset ? preset.accountId : null),
+    note: tx ? (tx.note || '') : (preset ? (preset.note || '') : ''),
+    tags: tx ? (tx.tags || []).join(', ') : (preset ? (preset.tags || []).join(', ') : '')
   };
   if (!st.accountId) {
     const a = SSZ.accById(prefs.account && prefs.account) || SSZ.DB.accounts.find(function (x) { return x.active; });
@@ -53,6 +53,7 @@ SSZ.openTxSheet = function (tx) {
       '</div>' +
       '<div class="keypad" id="tx-keypad"></div>' +
       '<button class="key-ok" id="tx-save" type="button">完成</button>' +
+      '<button class="btn btn-outline mt8" id="tx-tpl" type="button">⚡ 存为常用模板</button>' +
       (isEdit ? '<button class="btn btn-danger mt16" id="tx-delete" type="button">删除这笔</button>' : '')
   });
 
@@ -186,6 +187,21 @@ SSZ.openTxSheet = function (tx) {
   }
 
   $('tx-save').onclick = save;
+
+  /* --- 存为常用模板（v1.3） --- */
+  $('tx-tpl').onclick = function () {
+    const amount = SSZ.parseAmount(st.amountStr);
+    if (!amount) { SSZ.toast('先输入金额再存模板', 'err'); return; }
+    if (!st.categoryId || !st.accountId) { SSZ.toast('请先选好分类和账户', 'err'); return; }
+    const c = SSZ.catById(st.categoryId);
+    const name = (st.note.trim() || (c ? c.name : '常用')).slice(0, 12);
+    SSZ.addTemplate({
+      name: name, type: st.type, amount: amount, categoryId: st.categoryId,
+      accountId: st.accountId, note: st.note.trim(),
+      tags: st.tags.split(/[,，]/).map(function (x) { return x.trim(); }).filter(Boolean)
+    });
+    SSZ.toast('已存为模板「' + name + '」', 'ok');
+  };
 
   /* --- 编辑模式：删除 --- */
   if (isEdit) {
