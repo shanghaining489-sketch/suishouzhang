@@ -13,6 +13,10 @@ SSZ.renderers.mine = function (page) {
   html +=
     '<div class="block"><div class="list-group">' +
     SSZ.mineRow('🤖', 'AI 智能记账', '语音 + 截图自动识别', 'ai') +
+    SSZ.mineRow('⚡', '常用模板', '一键记重复的账', 'templates') +
+    SSZ.mineRow('🧩', '自动分类规则', '关键词 → 分类，识别更准', 'rules') +
+    '<button class="list-row" id="mine-transfer" type="button"><span class="list-ic">🔄</span>' +
+    '<span class="list-label">账户间转账</span><span class="list-chev">›</span></button>' +
     SSZ.mineRow('🏷️', '分类管理', '自定义收支分类', 'categories') +
     SSZ.mineRow('🎯', '月度预算', '控制每月花销', 'budget') +
     SSZ.mineRow('🐷', '存钱目标', '攒钱进度追踪', 'goals') +
@@ -21,7 +25,9 @@ SSZ.renderers.mine = function (page) {
 
   html +=
     '<div class="block"><div class="list-group">' +
-    SSZ.mineRow('💾', '备份与恢复', '导出 JSON，数据不出设备', 'backup') +
+    SSZ.mineRow('💾', '备份与恢复', '导出 JSON / CSV 账单导入', 'backup') +
+    '<button class="list-row" id="mine-theme" type="button"><span class="list-ic">🌗</span>' +
+    '<span class="list-label">外观</span><span class="list-value">' + SSZ.themeLabel() + '</span><span class="list-chev">›</span></button>' +
     '<div class="list-row"><span class="list-ic">📦</span>' +
     '<span class="list-label">存储用量</span>' +
     '<span class="list-value">' + txCount + ' 笔 · ' + si.kb.toFixed(1) + ' KB</span></div>' +
@@ -35,6 +41,8 @@ SSZ.renderers.mine = function (page) {
   Array.prototype.forEach.call(page.querySelectorAll('[data-nav]'), function (el) {
     el.onclick = function () { SSZ.navigate(el.dataset.nav); };
   });
+  page.querySelector('#mine-transfer').onclick = function () { SSZ.openTransferSheet(); };
+  page.querySelector('#mine-theme').onclick = function () { SSZ.cycleTheme(); SSZ.renderCurrent(); };
 };
 
 SSZ.mineRow = function (icon, label, value, route) {
