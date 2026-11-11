@@ -2,7 +2,7 @@
  * 策略：同源 GET → networkFirst（拿最新代码，失败回落缓存，离线仍可用）
  * 发版必须把 CACHE 常量 +1，否则旧缓存会一直兜住旧版 JS/CSS
  */
-var CACHE = 'ssz-v1.3.0';
+var CACHE = 'ssz-v1.3.1';
 
 var APP_SHELL = [
   './',

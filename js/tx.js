@@ -40,26 +40,37 @@ SSZ.openTxSheet = function (tx, preset) {
       '<button class="seg-btn" data-t="expense" type="button">支出</button>' +
       '<button class="seg-btn" data-t="income" type="button">收入</button>' +
       '</div>' +
+      '<div class="tx-amt-row">' +
+      '<span class="tx-cat-now" id="tx-cat-now">—</span>' +
       '<div class="amount-display">' +
       '<span class="cur">¥</span>' +
       '<span class="num placeholder" id="tx-amount">0.00</span>' +
       '</div>' +
+      '</div>' +
       '<div id="tx-cat-wrap"></div>' +
-      '<div class="list-group">' +
-      '<div class="field-row"><span class="fl">日期</span><input class="fv" type="date" id="tx-date"></div>' +
-      '<button class="field-row" id="tx-account-row" type="button"><span class="fl">账户</span><span class="fv" id="tx-account-name"></span></button>' +
-      '<div class="field-row"><span class="fl">备注</span><input class="fv" type="text" id="tx-note" placeholder="选填，如：午饭" maxlength="50"></div>' +
-      '<div class="field-row"><span class="fl">标签</span><input class="fv" type="text" id="tx-tags" placeholder="选填，逗号分隔" maxlength="60"></div>' +
+      '<div class="tx-fields">' +
+      '<label class="tx-f"><span>日期</span><input type="date" id="tx-date"></label>' +
+      '<button class="tx-f" id="tx-account-row" type="button"><span>账户</span><b id="tx-account-name"></b></button>' +
+      '<label class="tx-f tx-f-wide"><span>备注</span><input type="text" id="tx-note" placeholder="选填，如：午饭" maxlength="50"></label>' +
+      '<label class="tx-f tx-f-wide"><span>标签</span><input type="text" id="tx-tags" placeholder="选填，逗号分隔" maxlength="60"></label>' +
       '</div>' +
       '<div class="keypad" id="tx-keypad"></div>' +
       '<button class="key-ok" id="tx-save" type="button">完成</button>' +
-      '<button class="btn btn-outline mt8" id="tx-tpl" type="button">⚡ 存为常用模板</button>' +
-      (isEdit ? '<button class="btn btn-danger mt16" id="tx-delete" type="button">删除这笔</button>' : '')
+      (isEdit ? '<button class="btn btn-danger mt8" id="tx-delete" type="button">删除这笔</button>' : '')
   });
+  s.panel.classList.add('sheet-tx');
 
   const $ = function (id) { return s.body.querySelector('#' + id); };
 
-  /* --- 分类区渲染 --- */
+  /* 紧凑布局：把「存为常用模板」挪到标题栏，省一行高度 */
+  const headEl = s.panel.querySelector('.sheet-head');
+  const tplBtn = document.createElement('button');
+  tplBtn.type = 'button';
+  tplBtn.className = 'sheet-head-act';
+  tplBtn.textContent = '存模板';
+  headEl.insertBefore(tplBtn, headEl.querySelector('.sheet-close'));
+
+  /* --- 分类区渲染（单排横滑：最近常用在前，其余左右滑动可见） --- */
   function renderCats() {
     const cats = SSZ.DB.categories.filter(function (c) { return c.type === st.type; });
     const recents = SSZ.DB.recents.filter(function (id) {
@@ -68,9 +79,7 @@ SSZ.openTxSheet = function (tx, preset) {
     if (!st.categoryId || !cats.some(function (c) { return c.id === st.categoryId; })) {
       st.categoryId = (recents[0] || (cats[0] && cats[0].id)) || null;
     }
-    let html = '';
-    if (recents.length) html += '<div class="cat-sub">最近常用</div>';
-    html += '<div class="cat-grid">';
+    let html = '<div class="cat-strip">';
     const order = recents.concat(cats.filter(function (c) { return recents.indexOf(c.id) < 0; }).map(function (c) { return c.id; }));
     order.forEach(function (id) {
       const c = SSZ.catById(id);
@@ -87,8 +96,27 @@ SSZ.openTxSheet = function (tx, preset) {
         Array.prototype.forEach.call(s.body.querySelectorAll('.cat-cell'), function (x) {
           x.classList.toggle('active', x.dataset.id === st.categoryId);
         });
+        renderCatNow();
       };
     });
+    renderCatNow();
+    centerActiveCat();
+  }
+
+  /* 当前分类名（横滑时也能知道选中了哪个） */
+  function renderCatNow() {
+    const el = $('tx-cat-now');
+    const c = SSZ.catById(st.categoryId);
+    if (el) el.textContent = c ? c.icon + ' ' + c.name : '—';
+  }
+
+  /* 把选中分类滚到可视区中间 */
+  function centerActiveCat() {
+    const strip = s.body.querySelector('.cat-strip');
+    if (!strip) return;
+    const el = strip.querySelector('.cat-cell.active');
+    if (!el) return;
+    strip.scrollLeft = el.offsetLeft - strip.clientWidth / 2 + el.offsetWidth / 2;
   }
 
   /* --- 金额显示 --- */
@@ -188,8 +216,8 @@ SSZ.openTxSheet = function (tx, preset) {
 
   $('tx-save').onclick = save;
 
-  /* --- 存为常用模板（v1.3） --- */
-  $('tx-tpl').onclick = function () {
+  /* --- 存为常用模板（v1.3，按钮在标题栏） --- */
+  tplBtn.onclick = function () {
     const amount = SSZ.parseAmount(st.amountStr);
     if (!amount) { SSZ.toast('先输入金额再存模板', 'err'); return; }
     if (!st.categoryId || !st.accountId) { SSZ.toast('请先选好分类和账户', 'err'); return; }

@@ -36,6 +36,20 @@ SSZ.boot = function () {
       else if (sh === 'csv') SSZ.openCsvImportSheet();
     }, 300);
   }
+  // 测试辅助：?measure=1 把弹层高度写进 title，供无头浏览器读取（判断是否一屏装完）
+  if (location.search.indexOf('measure=1') >= 0) {
+    setTimeout(function () {
+      const p = document.querySelector('.sheet-tx');
+      if (!p) { document.title = 'MEASURE:no-sheet'; return; }
+      document.title = 'MEASURE vh=' + window.innerHeight +
+        ' panel=' + p.clientHeight + ' scroll=' + p.scrollHeight +
+        ' overflow=' + (p.scrollHeight - p.clientHeight) +
+        ' strip=' + (function () {
+          const st = p.querySelector('.cat-strip');
+          return st ? (st.clientWidth + '/' + st.scrollWidth) : 'none';
+        })();
+    }, 900);
+  }
 };
 
 if (document.readyState === 'loading') {
