@@ -21,6 +21,22 @@ SSZ.renderers.backup = function (page) {
 
   html +=
     '<div class="block"><div class="card card-pad">' +
+    '<div style="font-size:14px;font-weight:600;margin-bottom:6px">📊 导出 CSV 流水</div>' +
+    '<div class="tiny muted" style="line-height:1.7">Excel / WPS / 表格软件可直接打开，方便对账，' +
+    '或迁移到别的记账软件（UTF-8 编码，中文不乱码）。</div>' +
+    '<button class="btn btn-outline mt16" id="bk-csv-export" type="button">导出 CSV 流水</button>' +
+    '</div></div>';
+
+  html +=
+    '<div class="block"><div class="card card-pad">' +
+    '<div style="font-size:14px;font-weight:600;margin-bottom:6px">📥 导入微信 / 支付宝账单</div>' +
+    '<div class="tiny muted" style="line-height:1.7">选导出的 CSV 账单，自动识别列名、' +
+    '自动套用你的分类规则、跳过重复记录，预览确认后批量入账。</div>' +
+    '<button class="btn btn-outline mt16" id="bk-csv-import" type="button">选择 CSV 文件</button>' +
+    '</div></div>';
+
+  html +=
+    '<div class="block"><div class="card card-pad">' +
     '<div style="font-size:14px;font-weight:600;margin-bottom:6px">📥 从备份恢复</div>' +
     '<div class="tiny muted" style="line-height:1.7">选择之前导出的 JSON 文件恢复数据。' +
     '恢复会覆盖当前全部数据（当前数据会先自动留存，可随时回退）。</div>' +
@@ -52,7 +68,10 @@ SSZ.renderers.backup = function (page) {
       budgets: SSZ.DB.budgets,
       goals: SSZ.DB.goals,
       recurring: SSZ.DB.recurring,
-      recents: SSZ.DB.recents
+      recents: SSZ.DB.recents,
+      rules: SSZ.DB.rules || [],
+      templates: SSZ.DB.templates || [],
+      settings: SSZ.DB.settings || { theme: 'auto' }
     };
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -64,6 +83,10 @@ SSZ.renderers.backup = function (page) {
     SSZ.persistNow();
     SSZ.toast('备份文件已导出', 'ok');
   };
+
+  /* CSV 导出 / 导入 */
+  page.querySelector('#bk-csv-export').onclick = function () { SSZ.exportCSV(); };
+  page.querySelector('#bk-csv-import').onclick = function () { SSZ.openCsvImportSheet(); };
 
   /* 恢复 */
   const fileInput = page.querySelector('#bk-file');
@@ -85,7 +108,9 @@ SSZ.renderers.backup = function (page) {
             localStorage.setItem('ssz.rollback', JSON.stringify({
               categories: SSZ.DB.categories, accounts: SSZ.DB.accounts,
               transactions: SSZ.DB.transactions, budgets: SSZ.DB.budgets,
-              goals: SSZ.DB.goals, recurring: SSZ.DB.recurring, recents: SSZ.DB.recents
+              goals: SSZ.DB.goals, recurring: SSZ.DB.recurring, recents: SSZ.DB.recents,
+              rules: SSZ.DB.rules || [], templates: SSZ.DB.templates || [],
+              settings: SSZ.DB.settings || { theme: 'auto' }
             }));
           } catch (e) { /* 忽略 */ }
           SSZ.DB.categories = data.categories;
@@ -95,7 +120,11 @@ SSZ.renderers.backup = function (page) {
           SSZ.DB.goals = data.goals || [];
           SSZ.DB.recurring = data.recurring || [];
           SSZ.DB.recents = data.recents || [];
+          SSZ.DB.rules = data.rules || [];
+          SSZ.DB.templates = data.templates || [];
+          SSZ.DB.settings = data.settings || { theme: 'auto' };
           SSZ.persistNow();
+          SSZ.applyTheme();
           SSZ.toast('已从备份恢复', 'ok');
           SSZ.navigate('home');
         });
@@ -117,9 +146,11 @@ SSZ.validateBackup = function (d) {
   for (let i = 0; i < d.transactions.length; i++) {
     const t = d.transactions[i];
     if (!t || typeof t.amount !== 'number' || !Number.isInteger(t.amount)) return { ok: false, reason: '第' + (i + 1) + '笔金额异常' };
-    if (!catIds[t.categoryId]) return { ok: false, reason: '第' + (i + 1) + '笔分类无效' };
     if (!accIds[t.accountId]) return { ok: false, reason: '第' + (i + 1) + '笔账户无效' };
     if (!/^\d{4}-\d{2}-\d{2}$/.test(t.date || '')) return { ok: false, reason: '第' + (i + 1) + '笔日期无效' };
+    if (t.toAccountId && !accIds[t.toAccountId]) return { ok: false, reason: '第' + (i + 1) + '笔转入账户无效' };
+    if (t.type === 'transfer') continue; // 转账无分类
+    if (!catIds[t.categoryId]) return { ok: false, reason: '第' + (i + 1) + '笔分类无效' };
   }
   return { ok: true };
 };
@@ -137,7 +168,11 @@ SSZ.rollback = function () {
     SSZ.DB.goals = d.goals;
     SSZ.DB.recurring = d.recurring;
     SSZ.DB.recents = d.recents;
+    SSZ.DB.rules = d.rules || [];
+    SSZ.DB.templates = d.templates || [];
+    SSZ.DB.settings = d.settings || { theme: 'auto' };
     SSZ.persistNow();
+    SSZ.applyTheme();
     SSZ.toast('已回退到恢复前', 'ok');
     SSZ.renderCurrent();
   } catch (e) {
