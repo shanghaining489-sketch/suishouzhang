@@ -1,18 +1,24 @@
-/* 随手账 Service Worker
- * 策略：同源 GET → cacheFirst（命中即返，后台静默更新）；导航请求 → networkFirst，失败回落缓存 index.html
- * 发版时把 CACHE 常量 +1（如 'ssz-v2'），旧缓存会自动清理
+/* 随手账 Service Worker (v1.3.0)
+ * 策略：同源 GET → networkFirst（拿最新代码，失败回落缓存，离线仍可用）
+ * 发版必须把 CACHE 常量 +1，否则旧缓存会一直兜住旧版 JS/CSS
  */
-var CACHE = 'ssz-v1';
+var CACHE = 'ssz-v1.3.0';
+
 var APP_SHELL = [
   './',
   './index.html',
-  './manifest.webmanifest',
+  './manifest.json',
   './css/app.css',
   './libs/chart.umd.min.js',
   './js/store.js',
   './js/ui.js',
   './js/router.js',
   './js/tx.js',
+  './js/voice.js',
+  './js/extras.js',
+  './js/ai.js',
+  './js/transfer.js',
+  './js/csv.js',
   './js/pages-home.js',
   './js/pages-txlist.js',
   './js/pages-stats.js',
@@ -33,7 +39,10 @@ var APP_SHELL = [
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(CACHE).then(function (cache) {
-      return cache.addAll(APP_SHELL);
+      // 单个资源失败不拖垮整体安装
+      return Promise.all(APP_SHELL.map(function (u) {
+        return cache.add(u).catch(function () { return null; });
+      }));
     }).then(function () { return self.skipWaiting(); })
   );
 });
@@ -52,33 +61,21 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
-  if (url.origin !== location.origin) return; // 只处理同源
+  if (url.origin !== location.origin) return;
 
-  // 导航请求：networkFirst，失败回落缓存
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req).then(function (res) {
+  e.respondWith(
+    fetch(req).then(function (res) {
+      if (res && res.status === 200) {
         var copy = res.clone();
         caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        return res;
-      }).catch(function () {
-        return caches.match('./index.html').then(function (r) { return r || caches.match('./'); });
-      })
-    );
-    return;
-  }
-
-  // 其他同源 GET：cacheFirst，后台静默更新
-  e.respondWith(
-    caches.match(req).then(function (hit) {
-      var net = fetch(req).then(function (res) {
-        if (res && res.status === 200) {
-          var copy = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        }
-        return res;
-      }).catch(function () { return hit; });
-      return hit || net;
+      }
+      return res;
+    }).catch(function () {
+      return caches.match(req).then(function (r) {
+        if (r) return r;
+        if (req.mode === 'navigate') return caches.match('./index.html') || caches.match('./');
+        return r;
+      });
     })
   );
 });
