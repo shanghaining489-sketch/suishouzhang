@@ -36,6 +36,14 @@ SSZ.boot = function () {
       else if (sh === 'csv') SSZ.openCsvImportSheet();
     }, 300);
   }
+  // 测试辅助：?snapdemo=1 预置两个快照样本（供无头浏览器截图验证）
+  if (location.search.indexOf('snapdemo=1') >= 0) {
+    setTimeout(function () {
+      SSZ.takeSnapshot('正式开账前');
+      SSZ.takeSnapshot('导入账单前', true);
+      SSZ.renderCurrent();
+    }, 400);
+  }
   // 测试辅助：?measure=1 把弹层高度写进 title，供无头浏览器读取（判断是否一屏装完）
   if (location.search.indexOf('measure=1') >= 0) {
     setTimeout(function () {
