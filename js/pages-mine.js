@@ -7,6 +7,7 @@ window.SSZ = window.SSZ || {};
 SSZ.renderers.mine = function (page) {
   const si = SSZ.storageInfo();
   const txCount = SSZ.DB.transactions.length;
+  const snaps = SSZ._snapList ? SSZ._snapList() : [];
 
   let html = SSZ.pageHeader('我的', {});
 
@@ -26,6 +27,10 @@ SSZ.renderers.mine = function (page) {
   html +=
     '<div class="block"><div class="list-group">' +
     SSZ.mineRow('💾', '备份与恢复', '导出 JSON / CSV 账单导入', 'backup') +
+    SSZ.mineRow('📸', '快照与回滚',
+      snaps.length ? (snaps.length + ' 个还原点 · ' + SSZ._snapTime(snaps[0].at)) : '存还原点，改错了能回来',
+      'snapshots') +
+    SSZ.mineRow('♻️', '重置数据', '清空测试数据 / 恢复出厂', 'reset') +
     '<button class="list-row" id="mine-theme" type="button"><span class="list-ic">🌗</span>' +
     '<span class="list-label">外观</span><span class="list-value">' + SSZ.themeLabel() + '</span><span class="list-chev">›</span></button>' +
     '<div class="list-row"><span class="list-ic">📦</span>' +
