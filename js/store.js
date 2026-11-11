@@ -14,10 +14,13 @@ SSZ.KEYS = {
   budgets: 'ssz.budgets',
   goals: 'ssz.goals',
   recurring: 'ssz.recurring',
-  recents: 'ssz.recents'
+  recents: 'ssz.recents',
+  rules: 'ssz.rules',           // v1.3 自定义分类规则
+  templates: 'ssz.templates',   // v1.3 常用交易模板
+  settings: 'ssz.settings'      // v1.3 外观设置（主题）
 };
 
-SSZ.VERSION = '1.2.0';
+SSZ.VERSION = '1.3.0';
 
 /* ---------------- 基础工具 ---------------- */
 
@@ -162,6 +165,9 @@ SSZ.loadAll = function () {
   db.goals = SSZ.readJSON(SSZ.KEYS.goals) || [];
   db.recurring = SSZ.readJSON(SSZ.KEYS.recurring) || [];
   db.recents = SSZ.readJSON(SSZ.KEYS.recents) || [];
+  db.rules = SSZ.readJSON(SSZ.KEYS.rules) || [];
+  db.templates = SSZ.readJSON(SSZ.KEYS.templates) || [];
+  db.settings = SSZ.readJSON(SSZ.KEYS.settings) || { theme: 'auto' };
   SSZ.DB = db;
   return db;
 };
@@ -177,6 +183,9 @@ SSZ.persistNow = function () {
     localStorage.setItem(SSZ.KEYS.goals, JSON.stringify(db.goals));
     localStorage.setItem(SSZ.KEYS.recurring, JSON.stringify(db.recurring));
     localStorage.setItem(SSZ.KEYS.recents, JSON.stringify(db.recents));
+    localStorage.setItem(SSZ.KEYS.rules, JSON.stringify(db.rules || []));
+    localStorage.setItem(SSZ.KEYS.templates, JSON.stringify(db.templates || []));
+    localStorage.setItem(SSZ.KEYS.settings, JSON.stringify(db.settings || { theme: 'auto' }));
   } catch (e) {
     console.error('[随手账] 保存失败', e);
     if (SSZ.toast) SSZ.toast('存储空间不足，请先导出备份再清理旧数据', 'err');
@@ -202,6 +211,7 @@ SSZ.monthStats = function (ym) {
   for (let i = 0; i < txs.length; i++) {
     const t = txs[i];
     if (t.date.slice(0, 7) !== ym) continue;
+    if (t.type === 'transfer') continue; // 账户间转账不计入收支
     if (t.type === 'income') income += t.amount;
     else {
       expense += t.amount;
@@ -269,12 +279,20 @@ SSZ.saveTransaction = function (tx) {
     accountId: tx.accountId,
     date: tx.date,
     note: tx.note || '',
-    tags: tx.tags || []
+    tags: tx.tags || [],
+    toAccountId: tx.toAccountId || null   // v1.3 转账：转入账户
   };
   db.transactions.push(rec);
-  const acc = SSZ.accById(rec.accountId);
-  if (acc) acc.balance += (rec.type === 'income' ? rec.amount : -rec.amount);
-  SSZ.pushRecent(rec.categoryId);
+  if (rec.type === 'transfer') {
+    const from = SSZ.accById(rec.accountId);
+    const to = SSZ.accById(rec.toAccountId);
+    if (from) from.balance -= rec.amount;
+    if (to) to.balance += rec.amount;
+  } else {
+    const acc = SSZ.accById(rec.accountId);
+    if (acc) acc.balance += (rec.type === 'income' ? rec.amount : -rec.amount);
+  }
+  if (rec.type !== 'transfer') SSZ.pushRecent(rec.categoryId);
   SSZ.persistNow();
   if (rec.type === 'expense') SSZ.checkBudgetAlert(rec);
   return rec;
@@ -286,8 +304,15 @@ SSZ.deleteTransaction = function (id) {
   const idx = db.transactions.findIndex(function (t) { return t.id === id; });
   if (idx < 0) return false;
   const tx = db.transactions[idx];
-  const acc = SSZ.accById(tx.accountId);
-  if (acc) acc.balance -= (tx.type === 'income' ? tx.amount : -tx.amount);
+  if (tx.type === 'transfer') {
+    const from = SSZ.accById(tx.accountId);
+    const to = SSZ.accById(tx.toAccountId);
+    if (from) from.balance += tx.amount;
+    if (to) to.balance -= tx.amount;
+  } else {
+    const acc = SSZ.accById(tx.accountId);
+    if (acc) acc.balance -= (tx.type === 'income' ? tx.amount : -tx.amount);
+  }
   db.transactions.splice(idx, 1);
   SSZ.persistNow();
   return true;
@@ -308,8 +333,15 @@ SSZ.updateTransaction = function (id, patch) {
 SSZ.correctBalances = function () {
   SSZ.DB.accounts.forEach(function (a) { a.balance = a.initialBalance; });
   SSZ.DB.transactions.forEach(function (t) {
-    const acc = SSZ.accById(t.accountId);
-    if (acc) acc.balance += (t.type === 'income' ? t.amount : -t.amount);
+    if (t.type === 'transfer') {
+      const from = SSZ.accById(t.accountId);
+      const to = SSZ.accById(t.toAccountId);
+      if (from) from.balance -= t.amount;
+      if (to) to.balance += t.amount;
+    } else {
+      const acc = SSZ.accById(t.accountId);
+      if (acc) acc.balance += (t.type === 'income' ? t.amount : -t.amount);
+    }
   });
   SSZ.persistNow();
 };
@@ -544,6 +576,24 @@ SSZ.seedDemo = function () {
       freq: 'monthly', day: 1, nextDate: ymdY
     });
   }
+
+  // v1.3 演示：常用模板 + 一条自动分类规则（按名称去重，不覆盖用户已有的）
+  if (!db.templates) db.templates = [];
+  if (!db.rules) db.rules = [];
+  const food = db.categories.find(function (c) { return c.type === 'expense' && c.name === '餐饮'; }) || exp0;
+  const traffic = db.categories.find(function (c) { return c.type === 'expense' && c.name === '交通'; }) || exp0;
+  const tNames = {};
+  db.templates.forEach(function (t) { tNames[t.name] = true; });
+  [['午饭', 2500, food], ['地铁通勤', 600, traffic], ['咖啡', 1900, food]].forEach(function (x) {
+    if (tNames[x[0]]) return;
+    db.templates.push({
+      id: SSZ.uid('tp'), name: x[0], type: 'expense', amount: x[1],
+      categoryId: x[2].id, accountId: accs[0].id, note: '', tags: []
+    });
+  });
+  if (!db.rules.some(function (r) { return r.keyword.indexOf('星巴克') >= 0; })) {
+    db.rules.push({ id: SSZ.uid('ru'), keyword: '星巴克, 瑞幸, 咖啡', categoryId: food.id, type: 'expense' });
+  }
   SSZ.persistNow();
 };
 
@@ -555,4 +605,78 @@ SSZ.clearDemo = function () {
   SSZ.DB.recurring = [];
   SSZ.DB.recents = [];
   SSZ.correctBalances();
+};
+
+/* ---------------- v1.3 洞察 / 搜索 / 日历 ---------------- */
+
+SSZ.isTransfer = function (t) { return t && t.type === 'transfer'; };
+
+// 交易可搜索文本（备注 + 分类 + 账户 + 标签 + 商家）
+SSZ.txSearchText = function (t) {
+  return [t.date, t.note || '', SSZ.catName(t.categoryId), SSZ.accName(t.accountId),
+    (t.tags || []).join(' '), t.type === 'transfer' ? '转账' : ''].join(' ').toLowerCase();
+};
+
+// 按日期倒序分组前的统一搜索/筛选
+// opts: { q, type:'all|expense|income|transfer', categoryId, accountId, range:'month|3m|year|all', month }
+SSZ.searchTransactions = function (opts) {
+  opts = opts || {};
+  const q = (opts.q || '').trim().toLowerCase();
+  const range = opts.range || 'month';
+  const month = opts.month || SSZ.curMonth();
+  let from = null, to = null;
+  if (range === 'month') { from = month + '-01'; to = month + '-31'; }
+  else if (range === '3m') { from = SSZ.addMonths(month, -2) + '-01'; to = month + '-31'; }
+  else if (range === 'year') { from = month.slice(0, 4) + '-01-01'; to = month.slice(0, 4) + '-12-31'; }
+
+  const list = SSZ.DB.transactions.filter(function (t) {
+    if (from && t.date < from) return false;
+    if (to && t.date > to) return false;
+    if (opts.type && opts.type !== 'all' && t.type !== opts.type) return false;
+    if (opts.categoryId && t.categoryId !== opts.categoryId) return false;
+    if (opts.accountId && t.accountId !== opts.accountId && t.toAccountId !== opts.accountId) return false;
+    if (q && SSZ.txSearchText(t).indexOf(q) < 0) return false;
+    return true;
+  });
+  return list.sort(function (a, b) {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+};
+
+// 某月每日支出（分），排除收入/转账
+SSZ.dailyExpense = function (ym) {
+  const out = {};
+  SSZ.DB.transactions.forEach(function (t) {
+    if (t.type !== 'expense' || t.date.slice(0, 7) !== ym) return;
+    out[t.date] = (out[t.date] || 0) + t.amount;
+  });
+  return out;
+};
+
+// 本月洞察：环比 / 日均 / 最大单笔 / TOP3 分类 / 笔数 / 结余率
+SSZ.monthInsight = function (ym) {
+  const st = SSZ.monthStats(ym);
+  const prev = SSZ.monthStats(SSZ.addMonths(ym, -1));
+  const txs = SSZ.DB.transactions.filter(function (t) {
+    return t.date.slice(0, 7) === ym && t.type !== 'transfer';
+  });
+  const expTx = txs.filter(function (t) { return t.type === 'expense'; });
+  let maxTx = null;
+  expTx.forEach(function (t) { if (!maxTx || t.amount > maxTx.amount) maxTx = t; });
+
+  const isCur = ym === SSZ.curMonth();
+  const days = isCur ? new Date().getDate() : SSZ.daysInMonth(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)));
+  const top = Object.keys(st.byCat).map(function (id) { return { id: id, amount: st.byCat[id] }; })
+    .sort(function (a, b) { return b.amount - a.amount; }).slice(0, 3);
+
+  return {
+    st: st, prevExpense: prev.expense,
+    mom: prev.expense > 0 ? Math.round((st.expense - prev.expense) / prev.expense * 100) : null,
+    days: days,
+    dailyAvg: days > 0 ? Math.round(st.expense / days) : 0,
+    maxTx: maxTx, count: txs.length,
+    saveRate: st.income > 0 ? Math.round(st.balance / st.income * 100) : null,
+    top: top
+  };
 };
