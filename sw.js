@@ -1,8 +1,8 @@
-/* 随手账 Service Worker (v1.3.0)
+/* 随手账 Service Worker (v1.3.2)
  * 策略：同源 GET → networkFirst（拿最新代码，失败回落缓存，离线仍可用）
  * 发版必须把 CACHE 常量 +1，否则旧缓存会一直兜住旧版 JS/CSS
  */
-var CACHE = 'ssz-v1.3.1';
+var CACHE = 'ssz-v1.3.2';
 
 var APP_SHELL = [
   './',
@@ -29,6 +29,7 @@ var APP_SHELL = [
   './js/pages-categories.js',
   './js/pages-mine.js',
   './js/backup.js',
+  './js/snapshot.js',
   './js/pages-about.js',
   './js/app.js',
   './icons/icon-192.png',
