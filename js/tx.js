@@ -272,10 +272,12 @@ SSZ.pickAccount = function (cur) {
         '<span class="cat-ic">' + a.icon + '</span>' + SSZ.esc(a.name) + '</button>';
     });
     html += '</div>';
-    const s = SSZ.openSheet({ title: '选择账户', body: html });
+    /* stack:true —— 不能清空 sheet-root，否则会把发起选择的父面板（记一笔/转账/语音）一起销毁 */
+    const s = SSZ.openSheet({ title: '选择账户', body: html, stack: true });
+    let picked = null;
     Array.prototype.forEach.call(s.body.querySelectorAll('.cat-cell'), function (b) {
-      b.onclick = function () { s.close(); resolve(b.dataset.id); };
+      b.onclick = function () { picked = b.dataset.id; s.close(); };
     });
-    s.onClose = function () { resolve(null); };
+    s.onClose = function () { resolve(picked); };
   });
 };

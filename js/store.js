@@ -20,7 +20,7 @@ SSZ.KEYS = {
   settings: 'ssz.settings'      // v1.3 外观设置（主题）
 };
 
-SSZ.VERSION = '1.3.2';
+SSZ.VERSION = '1.3.3';
 
 /* ---------------- 基础工具 ---------------- */
 

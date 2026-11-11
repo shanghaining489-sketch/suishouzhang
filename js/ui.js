@@ -47,13 +47,23 @@ SSZ.confirm = function (title, msg, opts) {
 
 /* ---------------- 底部弹层 ---------------- */
 
+/* 支持多层堆叠：
+   - 页面级弹层（不传 stack）：先清空已有内容，再打开，避免快速连点产生重复层
+   - 嵌套弹层（stack:true）：保留父层，往上追加。用于「记一笔」里再选账户、编辑账户时再选图标
+     以前这里无条件 root.innerHTML=''，会把父面板连 DOM 一起销毁，导致选完账户回调报错、表单丢失 */
 SSZ.openSheet = function (opts) {
+  opts = opts || {};
   const root = document.getElementById('sheet-root');
-  root.innerHTML = '';
+  if (!opts.stack) root.innerHTML = '';
+  const depth = root.querySelectorAll('.sheet-panel').length;
+  const zBase = 200 + depth * 4;
+
   const mask = document.createElement('div');
   mask.className = 'sheet-mask';
+  mask.style.zIndex = String(zBase);
   const panel = document.createElement('div');
   panel.className = 'sheet-panel';
+  panel.style.zIndex = String(zBase + 1);
   panel.innerHTML =
     '<div class="sheet-head">' +
     '<div class="sheet-title">' + SSZ.esc(opts.title || '') + '</div>' +
@@ -62,15 +72,23 @@ SSZ.openSheet = function (opts) {
     '<div class="sheet-body">' + (opts.body || '') + '</div>';
   root.appendChild(mask);
   root.appendChild(panel);
-  function close() {
-    root.innerHTML = '';
-    document.body.style.overflow = '';
+
+  let closed = false;
+  const api = { panel: panel, body: panel.querySelector('.sheet-body'), close: null, onClose: null };
+  api.close = function () {
+    if (closed) return;
+    closed = true;
+    mask.remove();
+    panel.remove();
+    /* 只有全部层都关完才恢复页面滚动，否则内层关闭会把外层的滚动锁解掉 */
+    if (!root.querySelector('.sheet-panel')) document.body.style.overflow = '';
     if (opts.onClose) opts.onClose();
-  }
-  mask.onclick = close;
-  panel.querySelector('.sheet-close').onclick = close;
+    if (typeof api.onClose === 'function') api.onClose();
+  };
+  mask.onclick = api.close;
+  panel.querySelector('.sheet-close').onclick = api.close;
   document.body.style.overflow = 'hidden';
-  return { panel: panel, body: panel.querySelector('.sheet-body'), close: close };
+  return api;
 };
 
 /* ---------------- 月份选择（返回 Promise<'YYYY-MM' | null>） ---------------- */
@@ -81,6 +99,7 @@ SSZ.pickMonth = function (cur) {
     let m = Number(cur.split('-')[1]);
     const s = SSZ.openSheet({
       title: '选择月份',
+      stack: true,
       body:
         '<div class="month-pick">' +
         '<div class="mp-row">' +
@@ -91,6 +110,7 @@ SSZ.pickMonth = function (cur) {
         '<button class="btn btn-primary mt16" id="mp-ok" type="button">看这一月</button>' +
         '</div>'
     });
+    let picked = null;
     const curEl = s.body.querySelector('.mp-cur');
     function render() { curEl.textContent = y + '年' + m + '月'; }
     render();
@@ -103,10 +123,10 @@ SSZ.pickMonth = function (cur) {
       };
     });
     s.body.querySelector('#mp-ok').onclick = function () {
+      picked = y + '-' + SSZ.pad2(m);
       s.close();
-      resolve(y + '-' + SSZ.pad2(m));
     };
-    s.onClose = function () { resolve(null); };
+    s.onClose = function () { resolve(picked); };
   });
 };
 
@@ -127,12 +147,14 @@ SSZ.pickEmoji = function (current) {
     }).join('');
     const s = SSZ.openSheet({
       title: '选择图标',
+      stack: true,
       body: '<div class="emoji-grid">' + grid + '</div>'
     });
+    let picked = null;
     Array.prototype.forEach.call(s.body.querySelectorAll('button'), function (b) {
-      b.onclick = function () { s.close(); resolve(b.dataset.e); };
+      b.onclick = function () { picked = b.dataset.e; s.close(); };
     });
-    s.onClose = function () { resolve(null); };
+    s.onClose = function () { resolve(picked); };
   });
 };
 

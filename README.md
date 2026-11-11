@@ -216,7 +216,15 @@ https://shanghaining489-sketch.github.io/suishouzhang/
 
 ---
 
-*随手账 v1.3.2 · 纯本地 · 无账号 · 无广告*
+*随手账 v1.3.3 · 纯本地 · 无账号 · 无广告*
+
+### v1.3.3 修了什么（2026-11-11）
+
+记账时点「账户」选不到支付宝/微信/银行卡 —— 根因是弹层组件 `openSheet` 每次都先清空 `#sheet-root`，在「记一笔」里再开「选择账户」会把父面板连 DOM 一起销毁；选完后回调找不到 `#tx-account-name` 报错，表单和已输入的金额全丢。
+
+修法：`openSheet` 支持多层堆叠（`stack: true`），层级 z-index 按深度递增，关闭时只移除自己那层，全部关完才解除页面滚动锁。同时修掉 `pickAccount/pickMonth/pickEmoji` 里 `s.onClose` 赋了但从不被调用、取消选择时 Promise 永久挂起的问题。
+
+影响范围：记一笔、转账、语音记账、AI 记账里所有选账户，以及编辑账户选图标、切换月份。
 
 ### 关于「自动同步微信/支付宝」
 
