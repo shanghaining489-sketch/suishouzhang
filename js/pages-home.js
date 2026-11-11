@@ -34,6 +34,9 @@ SSZ.renderers.home = function (page) {
     '<span class="vc-go">›</span>' +
     '</button></div>';
 
+  /* 常用模板横滑（v1.3） */
+  html += SSZ.templatesHTML();
+
   /* 预算进度 */
   const bs = SSZ.budgetStatus(ym);
   if (bs.set) {
@@ -116,6 +119,8 @@ SSZ.renderers.home = function (page) {
   const voice = page.querySelector('#home-ai');
   if (voice) voice.onclick = function () { SSZ.navigate('ai'); };
 
+  SSZ.bindTemplates(page);
+
   const gen = page.querySelector('#due-gen');
   if (gen) {
     gen.onclick = function () {
@@ -140,6 +145,17 @@ SSZ.renderers.home = function (page) {
 
 /* 交易条目 HTML（明细页/账户详情复用） */
 SSZ.txItemHTML = function (t) {
+  /* v1.3 转账：不计收支，单独展示 */
+  if (t.type === 'transfer') {
+    const from = SSZ.accById(t.accountId);
+    const to = SSZ.accById(t.toAccountId);
+    const note = [(from ? from.name : '') + ' → ' + (to ? to.name : ''), t.note].filter(Boolean).join(' · ');
+    return '<button class="tx-item" data-id="' + t.id + '" type="button">' +
+      '<span class="tx-icon">🔄</span>' +
+      '<span class="tx-body"><span class="tx-name">账户转账</span>' +
+      (note ? '<span class="tx-note">' + SSZ.esc(note) + '</span>' : '') + '</span>' +
+      '<span class="tx-amount is-transfer">' + SSZ.fmt(t.amount) + '</span></button>';
+  }
   const c = SSZ.catById(t.categoryId);
   const a = SSZ.accById(t.accountId);
   const sign = t.type === 'income' ? '+' : '−';
@@ -150,6 +166,7 @@ SSZ.txItemHTML = function (t) {
     '<span class="tx-body">' +
     '<span class="tx-name">' + (c ? SSZ.esc(c.name) : '未分类') + '</span>' +
     (note ? '<span class="tx-note">' + SSZ.esc(note) + '</span>' : '') +
+    (t.tags && t.tags.length ? '<span class="tx-tags">' + t.tags.map(function (x) { return SSZ.esc(x); }).join(' · ') + '</span>' : '') +
     '</span>' +
     '<span class="tx-amount ' + cls + '">' + sign + SSZ.fmt(t.amount) + '</span>' +
     '</button>';
@@ -160,7 +177,9 @@ SSZ.bindTxItems = function (root) {
   Array.prototype.forEach.call(root.querySelectorAll('.tx-item'), function (el) {
     el.onclick = function () {
       const tx = SSZ.DB.transactions.find(function (t) { return t.id === el.dataset.id; });
-      if (tx) SSZ.openTxSheet(tx);
+      if (!tx) return;
+      if (tx.type === 'transfer') SSZ.openTransferSheet(tx);
+      else SSZ.openTxSheet(tx);
     };
   });
 };
