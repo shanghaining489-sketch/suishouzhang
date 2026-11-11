@@ -91,6 +91,8 @@ https://shanghaining489-sketch.github.io/suishouzhang/
 | 定期记账 | 房租、话费等固定收支设成每月 / 每周自动，到期一键生成 |
 | 明细 | 全部流水，按月小结，按日分组 |
 | 备份 | 导出 / 恢复 JSON，自动留退路 |
+| 快照与回滚 | 手动存还原点（最多 6 个，按备注识别），改错/导错可一键回到任意时间点；恢复前自动再存一个「恢复前自动」，点错也能回来 |
+| 重置数据 | 「清空账目」（保留分类账户，适合测试完正式用）和「恢复出厂」（全回初始，二次确认）；两种情况都先自动打快照兜底 |
 | AI 智能记账 | 聊天式：📷 传账单截图（微信/支付宝/银行）AI 自动识别多笔并批量入账；🎤 键盘语音说一句（如「午饭12块」）本地识别即入账。图片识别需在「AI 记账 → ⚙️」填一个视觉大模型 Key（仅存本机） |
 | 搜索与筛选 | 明细页全局搜索（备注 / 分类 / 账户 / 标签 / 日期）+ 类型、分类、账户、时间范围（本月 / 近3月 / 今年 / 全部）筛选 |
 | 账单导入导出 | 微信 / 支付宝 / 通用 CSV 一键导入：自动识别列名、套用分类规则、跳过重复、预览后批量入账；也可导出 UTF-8 CSV 给 Excel 对账或迁移 |
@@ -126,18 +128,19 @@ https://shanghaining489-sketch.github.io/suishouzhang/
 
 ## 六、给想改代码的你
 
-纯前端项目，无构建、无依赖（除 Chart.js 外已本地化），`index.html` 里按顺序加载 21 个 JS 文件：
+纯前端项目，无构建、无依赖（除 Chart.js 外已本地化），`index.html` 里按顺序加载 22 个 JS 文件：
 
 ```
 index.html              入口
 css/app.css             全部样式（设计系统 + 深色主题）
-js/store.js             数据层（localStorage 11 个 key）
+js/store.js             数据层（localStorage 11 个 key + 快照 key）
 js/tx.js                记账弹层
 js/voice.js             语音本地解析
 js/extras.js            分类规则 / 常用模板 / 主题（v1.3）
 js/ai.js                AI 聊天记账（v1.2）
 js/transfer.js          账户间转账（v1.3）
 js/csv.js               CSV 导入导出（v1.3）
+js/snapshot.js          快照回滚 / 重置数据（v1.4）
 js/pages-*.js           各页面
 js/app.js               启动入口
 libs/chart.umd.min.js   Chart.js（本地）
@@ -148,6 +151,7 @@ sw.js + manifest.json   PWA 离线支持
 - `?seed=demo` 生成 6 个月演示数据 + 示例模板/规则
 - `?theme=dark` 强制深色
 - `?sheet=add` / `?sheet=transfer` / `?sheet=filter` / `?sheet=csv` 打开即弹对应弹层
+- `?snapdemo=1` 预置两个快照样本；`?measure=1` 把弹层高度写进标题（查是否一屏装完）
 
 > **发版注意**：`sw.js` 里的 `CACHE` 常量每次发版必须 +1，否则旧缓存会一直兜住旧版 JS/CSS，手机刷新也看不到新功能。
 
@@ -212,7 +216,7 @@ https://shanghaining489-sketch.github.io/suishouzhang/
 
 ---
 
-*随手账 v1.3.0 · 纯本地 · 无账号 · 无广告*
+*随手账 v1.3.2 · 纯本地 · 无账号 · 无广告*
 
 ### 关于「自动同步微信/支付宝」
 
