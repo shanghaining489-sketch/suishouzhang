@@ -154,6 +154,25 @@ SSZ.boot = function () {
       SSZ.openAiSettings();
     }, 400);
   }
+  // 测试辅助：?aichip=1 验证 v2.0 只保留两个模型，且老配置里的 qwen3-vl-flash 会被红条提示
+  if (location.search.indexOf('aichip=1') >= 0) {
+    setTimeout(function () {
+      SSZ.saveAiConfig({
+        provider: 'dashscope',
+        model: 'qwen3-vl-flash',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        apiKey: 'sk-old-key-000'
+      });
+      SSZ.openAiSettings();
+      setTimeout(function () {
+        var chips = document.querySelectorAll('#ai-model-chips .ai-chip');
+        var names = Array.prototype.map.call(chips, function (b) { return b.dataset.m; }).join(',');
+        var warnEl = document.querySelector('.ai-test-out.err');
+        var warnTxt = warnEl ? (warnEl.textContent.indexOf('下线') >= 0 ? 'warn=1' : 'warn=0') : 'warn=none';
+        document.title = 'CHIP n=' + chips.length + ' | ' + names + ' | ' + warnTxt;
+      }, 300);
+    }, 400);
+  }
   // 测试辅助：?aierr=1 用假密钥走一遍「上传截图→失败」，验证错误气泡与重试按钮
   if (location.search.indexOf('aierr=1') >= 0) {
     setTimeout(function () {
