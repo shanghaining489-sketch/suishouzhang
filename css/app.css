@@ -1281,6 +1281,56 @@ svg { display: block; }
 .ai-loading .dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes ai-dot { 0%, 60%, 100% { opacity: .3; } 30% { opacity: 1; } }
 
+/* 识别失败：错误气泡 + 重试 */
+.ai-err-wrap { max-width: 88%; }
+.ai-err-wrap .ai-bubble.ai { max-width: 100%; }
+.ai-retry {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+}
+.ai-retry:active { background: #F2F3F7; }
+
+/* AI 设置：推荐模型快捷选择 + 连接测试结果 */
+.ai-model-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 10px;
+}
+.ai-chip {
+  font-size: 11.5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+  line-height: 1.3;
+}
+.ai-chip.active {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+  color: var(--primary);
+  font-weight: 600;
+}
+.ai-test-out {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.ai-test-out.ok { background: #E9F9EF; color: #12803A; }
+.ai-test-out.err { background: #FDECEC; color: #C92A2A; }
+
+/* 接口地址是长 URL，缩到 12px 少截断一截（仍可横向滑动查看/编辑） */
+#ai-url { font-size: 12px; letter-spacing: -.1px; }
+
 .ai-empty { text-align: center; padding: 48px 24px; color: var(--text-3); }
 .ae-ic { font-size: 42px; margin-bottom: 12px; }
 .ae-t { font-size: 15px; color: var(--text-2); font-weight: 600; margin-bottom: 12px; }
@@ -1637,3 +1687,8 @@ svg { display: block; }
 [data-theme="dark"] .snap-btn:active { background: #24304F; }
 [data-theme="dark"] .safe-note { background: #1B2A22; border-color: #2C4A38; }
 [data-theme="dark"] .safe-note b { color: #57C88A; }
+[data-theme="dark"] .ai-chip,
+[data-theme="dark"] .ai-retry { background: #262A33; }
+[data-theme="dark"] .ai-chip.active { background: #24304F; color: #8FB2FF; border-color: var(--primary); }
+[data-theme="dark"] .ai-test-out.ok { background: #16301F; color: #57C88A; }
+[data-theme="dark"] .ai-test-out.err { background: #3A1F1D; color: #FF8A8A; }
