@@ -17,6 +17,7 @@ SSZ.saveAiConfig = function (c) {
 
 // 服务商预设（baseUrl 兼容性接口 / OpenAI 格式）
 // 2026-11-12：qwen-vl-plus / qwen-vl-max 已于 2026-10-10 被阿里云下线，改默认到 qwen3-vl-plus
+// 2026-11-12 v2.0：qwen3-vl-flash 也在这批下线名单里（官方建议换 qwen3.6-flash），备选里移除，只留 plus 与 qwen3.8-flash
 SSZ.aiProviders = {
   dashscope: {
     name: '通义千问（阿里云百炼）',
@@ -24,7 +25,6 @@ SSZ.aiProviders = {
     model: 'qwen3-vl-plus',
     models: [
       ['qwen3-vl-plus', 'qwen3-vl-plus · 推荐，识别最准'],
-      ['qwen3-vl-flash', 'qwen3-vl-flash · 最便宜，截图够用'],
       ['qwen3.8-flash', 'qwen3.8-flash · 通用模型，也能看图']
     ]
   },
@@ -40,14 +40,22 @@ SSZ.aiProviders = {
   }
 };
 
-/* 已知下线的模型名 → 替换建议（阿里云 2026-10-10 下线名单） */
+/* 已知下线的模型名 → 替换建议（阿里云 2026-10-10 下线名单，v2.0 起不再提供 flash 备选） */
 SSZ.AI_RETIRED = {
   'qwen-vl-plus': 'qwen3-vl-plus',
   'qwen-vl-max': 'qwen3-vl-plus',
   'qwen-vl-plus-latest': 'qwen3-vl-plus',
   'qwen-vl-max-latest': 'qwen3-vl-plus',
   'qwen2.5-vl-72b-instruct': 'qwen3-vl-plus',
-  'qwen2.5-vl-32b-instruct': 'qwen3-vl-plus'
+  'qwen2.5-vl-32b-instruct': 'qwen3-vl-plus',
+  'qwen3-vl-flash': 'qwen3-vl-plus',
+  'qwen3-vl-flash-2025-10-15': 'qwen3-vl-plus',
+  'qwen3-vl-flash-2026-01-22': 'qwen3-vl-plus',
+  'qwen3-vl-flash-us': 'qwen3-vl-plus',
+  'qwen3-vl-32b-instruct': 'qwen3-vl-plus',
+  'qwen3-vl-8b-instruct': 'qwen3-vl-plus',
+  'qwen3-max': 'qwen3.8-flash',
+  'qwen3-max-preview': 'qwen3.8-flash'
 };
 
 /* ---------------- 提示词 ---------------- */
@@ -186,7 +194,7 @@ SSZ._aiErrorText = function (status, txt) {
   if (/Arrearage|overdue|insufficient|余额|quota.*exceed/i.test(raw)) return '账户余额不足或免费额度用完了，去百炼控制台充值后再试';
   if (/model.*(not.*(found|exist)|does not exist)|InvalidParameter.*model|ModelNotOpen|model_not_found|Unsupported model/i.test(raw)) {
     var alt = SSZ.AI_RETIRED[String(model).toLowerCase()];
-    if (alt) return '模型「' + model + '」已被阿里云下线（2026-10-10 停了 qwen-vl-plus / qwen-vl-max），把模型改成 ' + alt + ' 再试';
+    if (alt) return '模型「' + model + '」已被阿里云下线（2026-10-10 那批），把模型改成 ' + alt + ' 再试';
     return '模型「' + model + '」不存在或没开通——去百炼控制台「模型广场」核对准确的模型 ID，或换成 qwen3-vl-plus';
   }
   if (status === 401) return 'API Key 无效，到设置里重新填一次';
