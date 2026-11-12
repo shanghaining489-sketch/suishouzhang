@@ -16,17 +16,38 @@ SSZ.saveAiConfig = function (c) {
 };
 
 // 服务商预设（baseUrl 兼容性接口 / OpenAI 格式）
+// 2026-11-12：qwen-vl-plus / qwen-vl-max 已于 2026-10-10 被阿里云下线，改默认到 qwen3-vl-plus
 SSZ.aiProviders = {
   dashscope: {
-    name: '通义千问视觉',
+    name: '通义千问（阿里云百炼）',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-    model: 'qwen-vl-max'
+    model: 'qwen3-vl-plus',
+    models: [
+      ['qwen3-vl-plus', 'qwen3-vl-plus · 推荐，识别最准'],
+      ['qwen3-vl-flash', 'qwen3-vl-flash · 最便宜，截图够用'],
+      ['qwen3.8-flash', 'qwen3.8-flash · 通用模型，也能看图']
+    ]
   },
   siliconflow: {
     name: '硅基流动',
     baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
-    model: 'Qwen/Qwen2.5-VL-72B-Instruct'
+    model: 'Qwen/Qwen3-VL-32B-Instruct',
+    models: [
+      ['Qwen/Qwen3-VL-32B-Instruct', 'Qwen3-VL-32B · 推荐'],
+      ['Qwen/Qwen3-VL-30B-A3B-Instruct', 'Qwen3-VL-30B-A3B · 性价比'],
+      ['Qwen/Qwen3-VL-8B-Instruct', 'Qwen3-VL-8B · 最快']
+    ]
   }
+};
+
+/* 已知下线的模型名 → 替换建议（阿里云 2026-10-10 下线名单） */
+SSZ.AI_RETIRED = {
+  'qwen-vl-plus': 'qwen3-vl-plus',
+  'qwen-vl-max': 'qwen3-vl-plus',
+  'qwen-vl-plus-latest': 'qwen3-vl-plus',
+  'qwen-vl-max-latest': 'qwen3-vl-plus',
+  'qwen2.5-vl-72b-instruct': 'qwen3-vl-plus',
+  'qwen2.5-vl-32b-instruct': 'qwen3-vl-plus'
 };
 
 /* ---------------- 提示词 ---------------- */
@@ -48,7 +69,13 @@ SSZ.AI_SYS_PROMPT =
   '}\n' +
   '金额请使用正数；同一张截图里的多笔都要列出。';
 
-SSZ.AI_USER_PROMPT = '这是我的账单截图，请识别里面所有交易并整理成 JSON 数组返回。';
+SSZ.AI_USER_PROMPT = '这是我的账单截图，请识别里面所有交易并整理成 JSON 数组返回，不要任何解释。';
+
+/* 阿里云官方建议通用对话不要用 system message，把角色设定和格式要求一起放进 user message。
+   qwen3 系列部分模型对 system role 支持不一致，合并进 user 更稳。 */
+SSZ.AI_FULL_PROMPT = function () {
+  return SSZ.AI_SYS_PROMPT + '\n\n' + SSZ.AI_USER_PROMPT;
+};
 
 /* ---------------- 图片压缩（发送前降分辨率，省 token/流量） ---------------- */
 
@@ -57,7 +84,8 @@ SSZ._compressImage = function (file) {
     var img = new Image();
     var url = URL.createObjectURL(file);
     img.onload = function () {
-      var max = 1280, w = img.width, h = img.height;
+      /* 账单截图字小，1280 长边会糊，提到 1800；质量 0.9 兼顾清晰度与体积 */
+      var max = 1800, w = img.width, h = img.height;
       if (w > max || h > max) {
         if (w >= h) { h = Math.round(h * max / w); w = max; }
         else { w = Math.round(w * max / h); h = max; }
@@ -72,7 +100,7 @@ SSZ._compressImage = function (file) {
         r.onload = function () { resolve(r.result); };
         r.onerror = reject;
         r.readAsDataURL(blob);
-      }, 'image/jpeg', 0.82);
+      }, 'image/jpeg', 0.9);
     };
     img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('图片读取失败')); };
     img.src = url;
@@ -149,29 +177,54 @@ SSZ._parseAiRecords = function (content) {
 
 /* ---------------- 调用视觉大模型 ---------------- */
 
+/* 把接口返回的原始错误翻译成人能看懂、能照做的话 */
+SSZ._aiErrorText = function (status, txt) {
+  var raw = String(txt || '');
+  var cfg = SSZ.aiConfig();
+  var model = cfg.model || (SSZ.aiProviders[cfg.provider] || {}).model || '';
+  if (/invalid_api_key|Incorrect API key/i.test(raw)) return 'API Key 不对或已失效，点右上角 ⚙️ 重新粘贴一把';
+  if (/Arrearage|overdue|insufficient|余额|quota.*exceed/i.test(raw)) return '账户余额不足或免费额度用完了，去百炼控制台充值后再试';
+  if (/model.*(not.*(found|exist)|does not exist)|InvalidParameter.*model|ModelNotOpen|model_not_found|Unsupported model/i.test(raw)) {
+    var alt = SSZ.AI_RETIRED[String(model).toLowerCase()];
+    if (alt) return '模型「' + model + '」已被阿里云下线（2026-10-10 停了 qwen-vl-plus / qwen-vl-max），把模型改成 ' + alt + ' 再试';
+    return '模型「' + model + '」不存在或没开通——去百炼控制台「模型广场」核对准确的模型 ID，或换成 qwen3-vl-plus';
+  }
+  if (status === 401) return 'API Key 无效，到设置里重新填一次';
+  if (status === 403) return '没有这个模型的权限，去百炼控制台确认已开通';
+  if (status === 404) return '接口地址不对，应为 https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+  if (status === 429) return '调用太频繁或额度用尽，等一会儿再试';
+  if (status >= 500) return '阿里云服务端出错（' + status + '），过几分钟再试';
+  if (/DataInspectionFailed|inappropriate|sensitive/i.test(raw)) return '这张图被内容安全拦截了，换一张截图试试';
+  var brief = raw.replace(/\s+/g, ' ').slice(0, 120);
+  return '接口返回 ' + status + '：' + (brief || '未知错误');
+};
+
 SSZ.aiRecognize = function (dataUrl) {
   var cfg = SSZ.aiConfig();
   var p = SSZ.aiProviders[cfg.provider] || {};
   var baseUrl = cfg.baseUrl || p.baseUrl;
   var model = cfg.model || p.model;
   var key = cfg.apiKey;
-  if (!key) return Promise.reject(new Error('未配置 AI 密钥'));
-  if (!baseUrl) return Promise.reject(new Error('未配置接口地址'));
+  if (!key) return Promise.reject(new Error('还没填 AI 密钥，点右上角 ⚙️ 填一下'));
+  if (!baseUrl) return Promise.reject(new Error('没填接口地址'));
 
   var body = {
     model: model,
     temperature: 0.2,
+    /* 指令全部放进 user message（阿里官方建议不用 system role）；
+       图片在前、指令在后，与官方 OpenAI 兼容示例一致 */
     messages: [
-      { role: 'system', content: SSZ.AI_SYS_PROMPT },
       {
         role: 'user',
         content: [
-          { type: 'text', text: SSZ.AI_USER_PROMPT },
-          { type: 'image_url', image_url: { url: dataUrl } }
+          { type: 'image_url', image_url: { url: dataUrl } },
+          { type: 'text', text: SSZ.AI_FULL_PROMPT() }
         ]
       }
     ]
   };
+  /* qwen3 系列是混合思考模型，显式关掉思考：直接出 JSON，快且不会把推理过程混进结果 */
+  if (String(baseUrl).indexOf('dashscope') >= 0) body.enable_thinking = false;
 
   return fetch(baseUrl, {
     method: 'POST',
@@ -179,13 +232,18 @@ SSZ.aiRecognize = function (dataUrl) {
     body: JSON.stringify(body)
   }).then(function (res) {
     return res.text().then(function (txt) {
-      if (!res.ok) throw new Error('接口返回 ' + res.status + '：' + (txt || '').slice(0, 140));
+      if (!res.ok) throw new Error(SSZ._aiErrorText(res.status, txt));
       var json;
-      try { json = JSON.parse(txt); } catch (e) { throw new Error('返回不是合法 JSON'); }
-      var content = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-      if (!content) throw new Error('返回内容为空');
+      try { json = JSON.parse(txt); } catch (e) { throw new Error('返回不是合法 JSON：' + String(txt).slice(0, 100)); }
+      if (json && json.code) throw new Error(SSZ._aiErrorText(200, txt));
+      var msg = json.choices && json.choices[0] && json.choices[0].message;
+      var content = msg && (msg.content || msg.reasoning_content);
+      if (!content) throw new Error('模型返回内容为空');
       return SSZ._parseAiRecords(content);
     });
+  }, function (netErr) {
+    throw new Error('网络请求失败：' + ((netErr && netErr.message) || '连不上') +
+      '。若开着 VPN / 代理 / 广告拦截，先关掉再试');
   });
 };
 
@@ -295,6 +353,15 @@ SSZ._renderAiChat = function () {
       SSZ._renderAiChat();
     };
   });
+  /* 识别失败：原图重试一次 */
+  Array.prototype.forEach.call(box.querySelectorAll('.ai-retry'), function (btn) {
+    btn.onclick = function () {
+      var idx = Array.prototype.indexOf.call(box.querySelectorAll('.ai-retry'), btn);
+      var errs = msgs.filter(function (m) { return m.file; });
+      var m = errs[idx];
+      if (m && m.file) SSZ._sendImage(m.file, true);
+    };
+  });
   /* 批量保存 */
   var sb = box.querySelector('#ai-saveall');
   if (sb) sb.onclick = function () {
@@ -319,7 +386,10 @@ SSZ.aiBubble = function (m) {
       return '<div class="ai-row ai"><div class="ai-bubble ai"><span class="ai-loading">识别中<span class="dots"><i>.</i><i>.</i><i>.</i></span></span></div></div>';
     }
     if (m.error) {
-      return '<div class="ai-row ai"><div class="ai-bubble ai ai-err">⚠️ ' + SSZ.esc(m.error) + '</div></div>';
+      return '<div class="ai-row ai"><div class="ai-err-wrap">' +
+        '<div class="ai-bubble ai ai-err">⚠️ ' + SSZ.esc(m.error) + '</div>' +
+        (m.file ? '<button class="ai-retry" type="button">↻ 再试一次</button>' : '') +
+        '</div></div>';
     }
     if (m.records) return SSZ.aiRecordsBubble(m);
   }
@@ -360,31 +430,41 @@ SSZ.aiRecordsBubble = function (m) {
 
 /* ---------------- 发送：图片 ---------------- */
 
-SSZ._sendImage = function (file) {
+SSZ._sendImage = function (file, retry) {
   var cfg = SSZ.aiConfig();
   if (!cfg.apiKey) {
     SSZ.toast('请先填写 AI 密钥', 'err');
     SSZ.openAiSettings();
     return;
   }
-  var objUrl = URL.createObjectURL(file);
-  SSZ._aiMsgs.push({ role: 'user', kind: 'image', src: objUrl });
+  var objUrl = null;
+  if (!retry) {
+    objUrl = URL.createObjectURL(file);
+    SSZ._aiMsgs.push({ role: 'user', kind: 'image', src: objUrl });
+  } else {
+    /* 重试：清掉上一条错误，不再重复插入用户图片气泡 */
+    SSZ._aiMsgs = SSZ._aiMsgs.filter(function (m) { return !m.error; });
+  }
   SSZ._aiMsgs.push({ role: 'ai', loading: true });
   SSZ._renderAiChat();
 
   SSZ._compressImage(file).then(function (dataUrl) {
+    /* 气泡图换成压缩后的 dataUrl：objectURL 被回收后重渲染也不会裂图 */
+    for (var i = SSZ._aiMsgs.length - 1; i >= 0; i--) {
+      if (SSZ._aiMsgs[i].kind === 'image') { SSZ._aiMsgs[i].src = dataUrl; break; }
+    }
     return SSZ.aiRecognize(dataUrl);
   }).then(function (records) {
     SSZ._aiMsgs = SSZ._aiMsgs.filter(function (m) { return !m.loading; });
-    if (!records.length) SSZ._aiMsgs.push({ role: 'ai', error: '没识别到账单内容，换张清晰点的截图试试' });
+    if (!records.length) SSZ._aiMsgs.push({ role: 'ai', error: '没识别到账单内容，换张清晰点的截图试试', file: file });
     else SSZ._aiMsgs.push({ role: 'ai', records: records });
     SSZ._renderAiChat();
   }).catch(function (err) {
     SSZ._aiMsgs = SSZ._aiMsgs.filter(function (m) { return !m.loading; });
-    SSZ._aiMsgs.push({ role: 'ai', error: (err && err.message) || '识别失败' });
+    SSZ._aiMsgs.push({ role: 'ai', error: (err && err.message) || '识别失败', file: file });
     SSZ._renderAiChat();
   }).then(function () {
-    try { URL.revokeObjectURL(objUrl); } catch (e) {}
+    if (objUrl) { try { URL.revokeObjectURL(objUrl); } catch (e) {} }
   });
 };
 
@@ -500,52 +580,169 @@ SSZ.openAiRecordSheet = function (rec, onSave) {
 
 /* ---------------- AI 设置弹层 ---------------- */
 
+/* 用一组临时配置打一次最小请求，验证 密钥 / 地址 / 模型 三件事是否都通 */
+SSZ._aiPing = function (c) {
+  var body = {
+    model: c.model,
+    max_tokens: 16,
+    messages: [{ role: 'user', content: '连通性测试，请只回复 pong' }]
+  };
+  if (String(c.baseUrl).indexOf('dashscope') >= 0) body.enable_thinking = false;
+  var t0 = Date.now();
+  return fetch(c.baseUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + c.apiKey },
+    body: JSON.stringify(body)
+  }).then(function (res) {
+    return res.text().then(function (txt) {
+      if (!res.ok) throw new Error(SSZ._aiErrorText(res.status, txt));
+      var json;
+      try { json = JSON.parse(txt); } catch (e) { throw new Error('返回不是 JSON：' + String(txt).slice(0, 80)); }
+      if (json && json.code) throw new Error(SSZ._aiErrorText(200, txt));
+      var msg = json.choices && json.choices[0] && json.choices[0].message;
+      var reply = (msg && (msg.content || msg.reasoning_content)) || '';
+      return { ms: Date.now() - t0, model: c.model, reply: String(reply).trim().slice(0, 20) };
+    });
+  }, function (netErr) {
+    throw new Error('网络请求失败：' + ((netErr && netErr.message) || '连不上') +
+      '。若开着 VPN / 代理，先关掉再试');
+  });
+};
+
 SSZ.openAiSettings = function () {
   var cfg = SSZ.aiConfig();
   var p = SSZ.aiProviders;
+  var curProv = cfg.provider || 'dashscope';
+  var pp0 = p[curProv] || p.dashscope;
+  /* 没配过也要给默认值，用户只需粘一把 Key */
+  var initModel = cfg.model || pp0.model;
+  var initUrl = cfg.baseUrl || pp0.baseUrl;
+  /* 老配置里躺着已下线的模型 → 顶部先给一条警告，别让人猜为什么失败 */
+  var retiredNow = SSZ.AI_RETIRED[String(cfg.model || '').toLowerCase()];
+  var warn = retiredNow
+    ? '<div class="ai-test-out err" style="margin:0 0 12px">⚠️ 当前模型 <b>' + SSZ.esc(cfg.model) +
+      '</b> 已于 2026-10-10 被阿里云下线，识别一定失败。点下面的 <b>' + retiredNow + '</b> 换掉再保存。</div>'
+    : '';
   var opts = Object.keys(p).map(function (k) {
-    return '<option value="' + k + '"' + (cfg.provider === k ? ' selected' : '') + '>' + p[k].name + '</option>';
+    return '<option value="' + k + '"' + (curProv === k ? ' selected' : '') + '>' + p[k].name + '</option>';
   }).join('');
   var s = SSZ.openSheet({
     title: 'AI 记账设置',
     body:
+      warn +
       '<p class="voice-hint">用于图片/截图识别账单。密钥仅存本机，不上传；截图只发给所选 AI 用于识别。</p>' +
       '<div class="field-row"><span class="fl">服务商</span>' +
-        '<select class="fv" id="ai-prov">' + opts + '<option value="custom"' + (cfg.provider === 'custom' ? ' selected' : '') + '>自定义</option></select></div>' +
+        '<select class="fv" id="ai-prov">' + opts + '<option value="custom"' + (curProv === 'custom' ? ' selected' : '') + '>自定义</option></select></div>' +
       '<div class="field-row"><span class="fl">模型</span>' +
-        '<input class="fv" id="ai-model" value="' + SSZ.esc(cfg.model || '') + '" placeholder="如 qwen-vl-max"></div>' +
+        '<input class="fv" id="ai-model" value="' + SSZ.esc(initModel) + '" placeholder="如 qwen3-vl-plus"></div>' +
+      '<div class="ai-model-chips" id="ai-model-chips"></div>' +
       '<div class="field-row"><span class="fl">接口地址</span>' +
-        '<input class="fv" id="ai-url" value="' + SSZ.esc(cfg.baseUrl || '') + '" placeholder="https://..."></div>' +
+        '<input class="fv" id="ai-url" value="' + SSZ.esc(initUrl) + '" placeholder="https://..."></div>' +
       '<div class="field-row"><span class="fl">API Key</span>' +
         '<input class="fv" id="ai-key" type="password" value="' + SSZ.esc(cfg.apiKey || '') + '" placeholder="粘贴你的密钥"></div>' +
+      '<div class="ai-test-out" id="ai-test-out" style="display:none"></div>' +
       '<button class="btn btn-primary mt16" id="ai-save" type="button">保存</button>' +
+      '<button class="btn btn-ghost mt8" id="ai-test" type="button">测试连接</button>' +
       '<button class="btn btn-ghost mt8" id="ai-clear" type="button">清除密钥</button>'
   });
 
-  s.body.querySelector('#ai-prov').onchange = function () {
-    var k = s.body.querySelector('#ai-prov').value;
-    var pp = SSZ.aiProviders[k];
-    if (pp) {
-      s.body.querySelector('#ai-model').value = pp.model;
-      s.body.querySelector('#ai-url').value = pp.baseUrl;
-    }
-  };
-  s.body.querySelector('#ai-save').onclick = function () {
-    var c = {
-      provider: s.body.querySelector('#ai-prov').value,
-      model: s.body.querySelector('#ai-model').value.trim(),
-      baseUrl: s.body.querySelector('#ai-url').value.trim(),
-      apiKey: s.body.querySelector('#ai-key').value.trim()
+  var $ = function (id) { return s.body.querySelector('#' + id); };
+
+  function readForm() {
+    return {
+      provider: $('ai-prov').value,
+      model: $('ai-model').value.trim(),
+      baseUrl: $('ai-url').value.trim(),
+      apiKey: $('ai-key').value.trim()
     };
+  }
+
+  /* 推荐模型快点填入，省得记模型名 */
+  function renderChips() {
+    var pp = p[$('ai-prov').value];
+    var box = $('ai-model-chips');
+    if (!pp || !pp.models) { box.innerHTML = ''; return; }
+    box.innerHTML = pp.models.map(function (m) {
+      var on = $('ai-model').value.trim() === m[0] ? ' active' : '';
+      return '<button class="ai-chip' + on + '" type="button" data-m="' + m[0] + '">' + SSZ.esc(m[1]) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('.ai-chip'), function (b) {
+      b.onclick = function () {
+        $('ai-model').value = b.dataset.m;
+        Array.prototype.forEach.call(box.querySelectorAll('.ai-chip'), function (x) {
+          x.classList.toggle('active', x === b);
+        });
+        $('ai-test-out').style.display = 'none';
+      };
+    });
+  }
+
+  function showOut(ok, text) {
+    var el = $('ai-test-out');
+    el.className = 'ai-test-out ' + (ok ? 'ok' : 'err');
+    el.textContent = text;
+    el.style.display = 'block';
+  }
+
+  $('ai-prov').onchange = function () {
+    var k = $('ai-prov').value;
+    var pp = p[k];
+    if (pp) {
+      $('ai-model').value = pp.model;
+      $('ai-url').value = pp.baseUrl;
+    }
+    $('ai-test-out').style.display = 'none';
+    renderChips();
+  };
+
+  $('ai-model').oninput = function () {
+    Array.prototype.forEach.call(s.body.querySelectorAll('.ai-chip'), function (x) {
+      x.classList.toggle('active', x.dataset.m === $('ai-model').value.trim());
+    });
+  };
+
+  $('ai-save').onclick = function () {
+    var c = readForm();
     if (!c.apiKey) { SSZ.toast('请填写 API Key', 'err'); return; }
     if (!c.baseUrl) { SSZ.toast('请填写接口地址', 'err'); return; }
+    /* 填了已下线的模型名，直接纠错，别等调用失败再让用户猜 */
+    var retired = SSZ.AI_RETIRED[String(c.model).toLowerCase()];
+    var oldName = c.model;
+    if (retired) {
+      c.model = retired;
+      $('ai-model').value = retired;
+      SSZ.toast('「' + oldName + '」已下线，已自动换成 ' + retired, 'ok', 2600);
+    }
     SSZ.saveAiConfig(c);
     s.close();
-    SSZ.toast('已保存 ✓', 'ok');
+    if (!retired) SSZ.toast('已保存 ✓', 'ok');
   };
-  s.body.querySelector('#ai-clear').onclick = function () {
+
+  $('ai-test').onclick = function () {
+    var c = readForm();
+    if (!c.apiKey) { showOut(false, '先填 API Key'); return; }
+    if (!c.baseUrl) { showOut(false, '先填接口地址'); return; }
+    if (!c.model) { showOut(false, '先填模型名'); return; }
+    var btn = $('ai-test');
+    btn.disabled = true;
+    btn.textContent = '测试中…';
+    showOut(true, '正在连接 ' + c.model + ' …');
+    SSZ._aiPing(c).then(function (r) {
+      btn.disabled = false;
+      btn.textContent = '测试连接';
+      showOut(true, '✓ 连接成功 · ' + r.model + ' · ' + r.ms + 'ms' + (r.reply ? ' · 回复「' + r.reply + '」' : ''));
+    }, function (e) {
+      btn.disabled = false;
+      btn.textContent = '测试连接';
+      showOut(false, '✗ ' + ((e && e.message) || '连接失败'));
+    });
+  };
+
+  $('ai-clear').onclick = function () {
     SSZ.saveAiConfig({});
     s.close();
     SSZ.toast('已清除', 'ok');
   };
+
+  renderChips();
 };
