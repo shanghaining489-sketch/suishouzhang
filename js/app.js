@@ -180,7 +180,7 @@ SSZ.boot = function () {
             var retry = document.querySelector('#ai-chat .ai-retry');
             document.title = 'AIERR err=' + (errEl ? errEl.textContent.slice(0, 40) : 'none') +
               ' | retry=' + (retry ? 'yes' : 'no');
-          }, 2500);
+          }, 4000);
         }, 'image/png');
       }, 400);
     }, 400);
@@ -216,7 +216,7 @@ SSZ.boot = function () {
             var cards = document.querySelectorAll('#ai-chat .ai-rec').length;
             var saveBtn = document.querySelector('#ai-chat #ai-saveall');
             document.title = 'AIMOCK cards=' + cards + ' | save=' + (saveBtn ? saveBtn.textContent.trim() : 'no');
-          }, 1500);
+          }, 3200);
         }, 'image/png');
       }, 400);
     }, 400);
