@@ -122,6 +122,105 @@ SSZ.boot = function () {
       }, 200);
     }, 500);
   }
+  // 测试辅助：?aiset=1 直接打开 AI 设置弹层（截图用）
+  if (location.search.indexOf('aiset=1') >= 0) {
+    setTimeout(function () { SSZ.openAiSettings(); }, 400);
+  }
+  // 测试辅助：?aiping=1 用假密钥打一次真实请求，验证网络/CORS/错误翻译链路
+  if (location.search.indexOf('aiping=1') >= 0) {
+    setTimeout(function () {
+      var cfg = {
+        provider: 'dashscope',
+        model: 'qwen3-vl-plus',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        apiKey: 'sk-invalid-probe-000'
+      };
+      SSZ._aiPing(cfg).then(function (r) {
+        document.title = 'PING OK | ' + r.model + ' | ' + r.ms + 'ms';
+      }, function (e) {
+        document.title = 'PING ERR | ' + ((e && e.message) || 'unknown');
+      });
+    }, 400);
+  }
+  // 测试辅助：?aiold=1 模拟「老配置里躺着已下线模型」的场景
+  if (location.search.indexOf('aiold=1') >= 0) {
+    setTimeout(function () {
+      SSZ.saveAiConfig({
+        provider: 'dashscope',
+        model: 'qwen-vl-plus',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        apiKey: 'sk-old-key-000'
+      });
+      SSZ.openAiSettings();
+    }, 400);
+  }
+  // 测试辅助：?aierr=1 用假密钥走一遍「上传截图→失败」，验证错误气泡与重试按钮
+  if (location.search.indexOf('aierr=1') >= 0) {
+    setTimeout(function () {
+      SSZ.saveAiConfig({
+        provider: 'dashscope',
+        model: 'qwen3-vl-plus',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        apiKey: 'sk-invalid-probe-000'
+      });
+      SSZ.navigate('ai');
+      setTimeout(function () {
+        var cv = document.createElement('canvas');
+        cv.width = 300; cv.height = 420;
+        var ctx = cv.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 300, 420);
+        ctx.fillStyle = '#111'; ctx.font = '18px sans-serif';
+        ctx.fillText('账单测试图', 20, 60);
+        ctx.fillText('午饭 12.50', 20, 120);
+        cv.toBlob(function (blob) {
+          var file = new File([blob], 'test.png', { type: 'image/png' });
+          SSZ._sendImage(file);
+          setTimeout(function () {
+            var errEl = document.querySelector('#ai-chat .ai-err');
+            var retry = document.querySelector('#ai-chat .ai-retry');
+            document.title = 'AIERR err=' + (errEl ? errEl.textContent.slice(0, 40) : 'none') +
+              ' | retry=' + (retry ? 'yes' : 'no');
+          }, 2500);
+        }, 'image/png');
+      }, 400);
+    }, 400);
+  }
+  // 测试辅助：?aimock=1 拦截 fetch 返回一份真实的 qwen 风格响应，验证识别结果卡片渲染
+  if (location.search.indexOf('aimock=1') >= 0) {
+    setTimeout(function () {
+      SSZ.saveAiConfig({
+        provider: 'dashscope',
+        model: 'qwen3-vl-plus',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        apiKey: 'sk-mock'
+      });
+      window.fetch = function () {
+        return Promise.resolve({
+          ok: true, status: 200,
+          text: function () {
+            return Promise.resolve(JSON.stringify({
+              choices: [{ message: { content: '```json\n[{"date":"2026-11-11","type":"expense","amount":12.5,"category":"餐饮","account":"微信","merchant":"麦当劳","note":"午饭"},{"date":"2026-11-10","type":"expense","amount":38,"category":"交通","account":"支付宝","merchant":"滴滴出行","note":""},{"date":"2026-11-09","type":"income","amount":200,"category":"红包","account":"微信","merchant":"微信红包","note":""}]\n```' } }]
+            }));
+          }
+        });
+      };
+      SSZ.navigate('ai');
+      setTimeout(function () {
+        var cv = document.createElement('canvas');
+        cv.width = 300; cv.height = 420;
+        var ctx = cv.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 300, 420);
+        cv.toBlob(function (blob) {
+          SSZ._sendImage(new File([blob], 'test.png', { type: 'image/png' }));
+          setTimeout(function () {
+            var cards = document.querySelectorAll('#ai-chat .ai-rec').length;
+            var saveBtn = document.querySelector('#ai-chat #ai-saveall');
+            document.title = 'AIMOCK cards=' + cards + ' | save=' + (saveBtn ? saveBtn.textContent.trim() : 'no');
+          }, 1500);
+        }, 'image/png');
+      }, 400);
+    }, 400);
+  }
   // 测试辅助：?measure=1 把弹层高度写进 title，供无头浏览器读取（判断是否一屏装完）
   if (location.search.indexOf('measure=1') >= 0) {
     setTimeout(function () {
